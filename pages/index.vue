@@ -71,7 +71,7 @@
         icon="i-heroicons-magnifying-glass"
         class="flex-1"
       />
-      <UButton color="primary" @click="addNewRequest">
+      <UButton color="primary" @click="showNewRequestModal = true">
         Add Request
       </UButton>
     </div>
@@ -98,7 +98,7 @@
         </template>
         
         <template #countdown-data="{ row }">
-          <RequestCountdown :created-at="row.created_at" :priority="row.priority" />
+          <RequestCountdown :requested-at="row.requested_at" :priority="row.priority" />
         </template>
         
         <template #actions-data="{ row }">
@@ -108,55 +108,43 @@
         </template>
       </UTable>
     </UCard>
+
+    <!-- New Request Modal -->
+    <NewRequestModal v-model="showNewRequestModal" @success="onRequestCreated" />
   </div>
 </template>
 
-<script setup>
-const supabase = useSupabaseClient()
+<script setup lang="ts">
+import type { RadiologyRequest } from '~/types/database'
+
+const { fetchRequests, getRequestsSummary, updateRequestStatus, subscribeToRequests } = useRadiologyRequests()
 
 // Reactive data
 const selectedPriority = ref('')
 const selectedModality = ref('')
 const searchQuery = ref('')
+const showNewRequestModal = ref(false)
 
-// Sample data (replace with real Supabase queries)
+// Real Supabase data
 const { data: requests, pending, refresh } = await useLazyAsyncData('radiology-requests', async () => {
-  // This will be replaced with actual Supabase query
-  return [
-    {
-      id: 1,
-      patient_name: 'John Doe',
-      patient_id: 'P001',
-      modality: 'CT',
-      study_type: 'Chest CT',
-      priority: 'urgent',
-      created_at: new Date(Date.now() - 30 * 60000).toISOString(), // 30 minutes ago
-      location: 'ER',
-      referring_physician: 'Dr. Smith'
-    },
-    {
-      id: 2,
-      patient_name: 'Jane Smith',
-      patient_id: 'P002',
-      modality: 'MRI',
-      study_type: 'Brain MRI',
-      priority: 'priority',
-      created_at: new Date(Date.now() - 120 * 60000).toISOString(), // 2 hours ago
-      location: 'ICU',
-      referring_physician: 'Dr. Johnson'
-    },
-    {
-      id: 3,
-      patient_name: 'Robert Brown',
-      patient_id: 'P003',
-      modality: 'X-Ray',
-      study_type: 'Chest X-Ray',
-      priority: 'routine',
-      created_at: new Date(Date.now() - 240 * 60000).toISOString(), // 4 hours ago
-      location: 'Ward A',
-      referring_physician: 'Dr. Davis'
-    }
-  ]
+  return await fetchRequests()
+})
+
+const { data: summary, pending: summaryPending, refresh: refreshSummary } = await useLazyAsyncData('requests-summary', async () => {
+  return await getRequestsSummary()
+})
+
+// Subscribe to real-time updates
+onMounted(() => {
+  const channel = subscribeToRequests((payload) => {
+    console.log('Real-time update:', payload)
+    refresh()
+    refreshSummary()
+  })
+
+  onUnmounted(() => {
+    channel.unsubscribe()
+  })
 })
 
 // Table columns
@@ -205,20 +193,8 @@ const filteredRequests = computed(() => {
 })
 
 const stats = computed(() => {
-  if (!requests.value) return { urgent: 0, priority: 0, routine: 0, total: 0 }
-  
-  const counts = requests.value.reduce((acc, request) => {
-    acc[request.priority] = (acc[request.priority] || 0) + 1
-    acc.total = (acc.total || 0) + 1
-    return acc
-  }, {})
-  
-  return {
-    urgent: counts.urgent || 0,
-    priority: counts.priority || 0,
-    routine: counts.routine || 0,
-    total: counts.total || 0
-  }
+  if (!summary.value) return { urgent: 0, priority: 0, routine: 0, total: 0 }
+  return summary.value
 })
 
 // Methods
@@ -258,13 +234,18 @@ const viewImages = (id) => {
   console.log('Viewing images for request:', id)
 }
 
-const markAsRead = (id) => {
-  // Implement mark as read
-  console.log('Marking as read:', id)
+const markAsRead = async (id) => {
+  try {
+    await updateRequestStatus(id, 'in_progress')
+    refresh()
+    refreshSummary()
+  } catch (error) {
+    console.error('Error marking as read:', error)
+  }
 }
 
 const assignToMe = (id) => {
-  // Implement assignment
+  // Implement assignment to current user
   console.log('Assigning to current user:', id)
 }
 
@@ -273,9 +254,9 @@ const editRequest = (id) => {
   console.log('Editing request:', id)
 }
 
-const addNewRequest = () => {
-  // Implement add new request
-  console.log('Adding new request')
+const onRequestCreated = () => {
+  refresh()
+  refreshSummary()
 }
 
 // Set page meta

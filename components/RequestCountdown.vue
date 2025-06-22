@@ -11,9 +11,9 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 const props = defineProps({
-  createdAt: {
+  requestedAt: {
     type: String,
     required: true
   },
@@ -44,8 +44,8 @@ const THRESHOLDS = {
 
 const updateElapsedTime = () => {
   const now = new Date()
-  const created = new Date(props.createdAt)
-  const diffMs = now - created
+  const requested = new Date(props.requestedAt)
+  const diffMs = now - requested
   const diffMinutes = Math.floor(diffMs / 60000)
   
   elapsedTime.value = diffMinutes

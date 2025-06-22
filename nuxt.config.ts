@@ -11,5 +11,10 @@ export default defineNuxtConfig({
     '@nuxt/scripts',
     '@nuxt/ui',
     '@nuxtjs/supabase'
-  ]
+  ],
+
+
+  supabase: {
+    redirect: false
+  }
 })
